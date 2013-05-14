@@ -1,3 +1,4 @@
+import itertools  # only used for verification
 import optparse
 import random
 import time
@@ -17,12 +18,18 @@ def dist(x, y):
     return _DISTANCES[(x, y)]
 
 
-def verify_path(path, expected_dist):
-    """Sanity check that the computed path has the correct distance."""
-    total = 0
-    for i in xrange(len(path) - 1):
-        total += dist(path[i], path[i + 1])
-    assert abs(total - expected_dist) < 0.0001
+def brute_force_solution(num):
+    """Compute the best solution by brute force."""
+    longest_dist = 0
+    best_path = None
+    for perm in itertools.permutations(range(num)):
+        perm_dist = 0
+        for x in xrange(0, num - 1):
+            perm_dist += dist(perm[x], perm[x + 1])
+        if perm_dist > longest_dist:
+            longest_dist = perm_dist
+            best_path = perm
+    return list(best_path)
 
 
 def best_mixtape(num, verify=False):
@@ -35,31 +42,27 @@ def best_mixtape(num, verify=False):
         for j in xrange(num):
             if i != j:
                 key = (1 << (i + 1)) | (1 << (j + 1))
-                ij_dist = dist(i, j)
-                ji_dist = dist(j, i)
-                if ij_dist < ji_dist:
-                    lookup[key] = ([i, j], ij_dist)
-                else:
-                    lookup[key] = ([j, i], ji_dist)
+                lookup[(1 << (i + 1), j)] = [i, j], dist(i, j)
+                lookup[(1 << (j + 1), i)] = [j, i], dist(j, i)
 
     # Now we are going to build new lookup tables for all triples,
     # quadruples, etc.
     for _ in xrange(2, num):
         new_lookup = {}
         for song_id in xrange(num):
-            for int_key, (path, distance) in lookup.iteritems():
+            for (int_key, last_node), (path, distance) in lookup.iteritems():
                 if song_id in path:
                     continue
                 new_path = path + [song_id]
-                new_dist = distance + dist(path[-1], song_id)
+                new_dist = distance + dist(last_node, song_id)
                 new_key = int_key | (1 << (song_id + 1))
 
-                existing = new_lookup.get(new_key)
+                existing = new_lookup.get((new_key, song_id))
                 if existing is None:
-                    new_lookup[new_key] = (new_path, new_dist)
+                    new_lookup[(new_key, song_id)] = (new_path, new_dist)
                 else:
                     if new_dist > existing[1]:
-                        new_lookup[new_key] = (new_path, new_dist)
+                        new_lookup[(new_key, song_id)] = (new_path, new_dist)
         lookup = new_lookup
 
     # We've generated all of the lists for size num, we can find the
@@ -70,11 +73,16 @@ def best_mixtape(num, verify=False):
     best_path = None
     longest_dist = 0
     for _, (path, distance) in lookup.iteritems():
-        if verify:
-            verify_path(path, distance)
         if distance > longest_dist:
             longest_dist = distance
             best_path = path
+
+    if verify:
+        brute_force = brute_force_solution(num)
+        if best_path != brute_force:
+            print 'brute_force: %s' % (brute_force,)
+            print 'best path: %s' % (best_path,)
+
 
     # Return the longest path
     return longest_dist, best_path
